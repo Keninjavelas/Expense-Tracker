@@ -1,0 +1,16 @@
+body {
+    font-family: sans-serif;
+    max-width: 600px;
+    margin: auto;
+    padding: 1rem;
+  }
+  
+  input, button {
+    margin: 0.3rem;
+    padding: 0.4rem;
+  }
+  
+  form {
+    margin-bottom: 1rem;
+  }
+  

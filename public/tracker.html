@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Expense Tracker Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="min-h-screen flex flex-col items-center p-6 space-y-6">
+
+  <header class="text-center">
+    <h1 class="text-4xl font-bold text-blue-400 mb-2">🚀 Expense Tracker</h1>
+    <p class="text-gray-400">Track, Analyze, and Visualize your expenses in style</p>
+  </header>
+
+  <!-- Insights Section -->
+  <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
+    <h2 class="text-2xl font-semibold text-purple-400 mb-4">📊 Insights</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+      <div class="bg-gray-700 p-4 rounded">
+        <h3 class="text-xl text-green-400">This Month's Spending</h3>
+        <p id="total-spending" class="text-2xl mt-2 font-bold">₹0</p>
+      </div>
+      <div class="bg-gray-700 p-4 rounded">
+        <h3 class="text-xl text-yellow-400">Top Categories</h3>
+        <ul id="top-categories" class="mt-2 space-y-1"></ul>
+      </div>
+      <div class="bg-gray-700 p-4 rounded">
+        <h3 class="text-xl text-pink-400">Category Breakdown</h3>
+        <canvas id="pieChart" width="100" height="100"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filters -->
+  <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg space-y-4">
+    <div class="flex flex-wrap justify-between items-center space-y-2 md:space-y-0">
+      <input type="text" id="filterCategory" placeholder="Filter by category..." class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3" />
+      <input type="date" id="filterDate" class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3" />
+      <button onclick="clearFilters()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">Clear Filters</button>
+    </div>
+  </section>
+
+  <!-- Expense Table -->
+  <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
+    <h2 class="text-2xl font-semibold text-blue-400 mb-4">💸 Your Expenses</h2>
+    <table class="w-full text-left text-sm">
+      <thead>
+        <tr class="text-purple-300 border-b border-gray-600">
+          <th class="p-2 cursor-pointer" onclick="sortTable('amount')">Amount</th>
+          <th class="p-2 cursor-pointer" onclick="sortTable('category')">Category</th>
+          <th class="p-2 cursor-pointer" onclick="sortTable('date')">Date</th>
+          <th class="p-2">Note</th>
+        </tr>
+      </thead>
+      <tbody id="expenseTable" class="text-gray-300"></tbody>
+    </table>
+  </section>
+
+  <!-- Bar Chart -->
+  <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
+    <h2 class="text-2xl font-semibold text-blue-400 mb-4">📈 Total Expenses</h2>
+    <canvas id="barChart"></canvas>
+  </section>
+
+  <script>
+    let expenses = [];
+
+    async function fetchData() {
+      const res = await fetch('/expenses');
+      expenses = await res.json();
+      displayExpenses(expenses);
+      drawBarChart();
+    }
+
+    function displayExpenses(data) {
+      const table = document.getElementById('expenseTable');
+      table.innerHTML = '';
+      data.forEach(exp => {
+        const row = `<tr class="border-b border-gray-700">
+          <td class="p-2">₹${exp.amount.toFixed(2)}</td>
+          <td class="p-2">${exp.category}</td>
+          <td class="p-2">${exp.date}</td>
+          <td class="p-2">${exp.note}</td>
+        </tr>`;
+        table.innerHTML += row;
+      });
+    }
+
+    function sortTable(key) {
+      const sorted = [...expenses].sort((a, b) => {
+        if (key === 'amount') return b.amount - a.amount;
+        if (key === 'date') return new Date(b.date) - new Date(a.date);
+        return a[key].localeCompare(b[key]);
+      });
+      displayExpenses(sorted);
+    }
+
+    function applyFilters() {
+      const category = document.getElementById('filterCategory').value.toLowerCase();
+      const date = document.getElementById('filterDate').value;
+      const filtered = expenses.filter(exp =>
+        (category ? exp.category.toLowerCase().includes(category) : true) &&
+        (date ? exp.date === date : true)
+      );
+      displayExpenses(filtered);
+    }
+
+    function clearFilters() {
+      document.getElementById('filterCategory').value = '';
+      document.getElementById('filterDate').value = '';
+      displayExpenses(expenses);
+    }
+
+    async function drawBarChart() {
+      const totals = {};
+      expenses.forEach(exp => {
+        totals[exp.category] = (totals[exp.category] || 0) + exp.amount;
+      });
+      const ctx = document.getElementById('barChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(totals),
+          datasets: [{
+            label: 'Total Expense (₹)',
+            data: Object.values(totals),
+            backgroundColor: 'rgba(59, 130, 246, 0.7)'
+          }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    async function loadAnalytics() {
+      const totalRes = await fetch('/analytics/total');
+      const totalData = await totalRes.json();
+      document.getElementById('total-spending').textContent = `₹${totalData.total.toFixed(2)}`;
+
+      const topRes = await fetch('/analytics/top-categories');
+      const topData = await topRes.json();
+      const topEl = document.getElementById('top-categories');
+      topEl.innerHTML = topData.map(cat => `<li>${cat.category} - ₹${cat.total.toFixed(2)}</li>`).join('');
+
+      const pieRes = await fetch('/analytics/pie');
+      const pieData = await pieRes.json();
+      const ctx = document.getElementById('pieChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: pieData.map(p => p.category),
+          datasets: [{
+            data: pieData.map(p => p.total),
+            backgroundColor: ['#60a5fa', '#f472b6', '#34d399', '#facc15', '#a78bfa']
+          }]
+        },
+        options: { responsive: true }
+      });
+    }
+
+    document.getElementById('filterCategory').addEventListener('input', applyFilters);
+    document.getElementById('filterDate').addEventListener('input', applyFilters);
+
+    window.onload = async () => {
+      await fetchData();
+      await loadAnalytics();
+    };
+  </script>
+</body>
+</html>
