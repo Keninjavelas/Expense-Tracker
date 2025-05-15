@@ -1,172 +1,269 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
-const session = require('express-session');
 const sqlite3 = require('sqlite3').verbose();
+const session = require('express-session');
 const path = require('path');
-
+const bcrypt = require('bcrypt');
 const app = express();
+
+// Database setup
 const db = new sqlite3.Database('./database.db');
 
-app.use(express.static('public'));
+// Create tables if they don't exist
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    )
+  `);
+  
+  db.run(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      category TEXT NOT NULL,
+      date TEXT NOT NULL,
+      note TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    )
+  `);
+});
+
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  secret: 'expense_secret_key',
+  secret: 'expense_tracker_secret',
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false
+    secure: false,
+    maxAge: 24 * 60 * 60 * 1000 // 1 day
   }
 }));
 
-// Create tables
-db.run(`CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE,
-  password TEXT
-)`);
+// CORS configuration
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'http://localhost:5500');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
 
-db.run(`CREATE TABLE IF NOT EXISTS expenses (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  amount REAL,
-  category TEXT,
-  date TEXT,
-  note TEXT,
-  FOREIGN KEY(user_id) REFERENCES users(id)
-)`);
+// Auth middleware
+const requireAuth = (req, res, next) => {
+  if (!req.session.userId) {
+    return res.status(403).json({ error: 'Not authenticated' });
+  }
+  next();
+};
 
 // Routes
-app.post('/signup', (req, res) => {
-  const { username, password } = req.body;
-  bcrypt.hash(password, 10, (err, hash) => {
-    db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hash], function (err) {
-      if (err) return res.status(400).send('Username already exists');
-      req.session.userId = this.lastID;
-      res.redirect('/tracker.html');
-    });
-  });
+app.post('/signup', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 12);
+    
+    db.run(
+      'INSERT INTO users (username, password) VALUES (?, ?)',
+      [username, hashedPassword],
+      function(err) {
+        if (err) {
+          return res.status(400).json({ error: 'Username already exists' });
+        }
+        req.session.userId = this.lastID;
+        res.json({ success: true });
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
+// ✅ Login Route
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
-  db.get('SELECT * FROM users WHERE username = ?', [username], (err, user) => {
-    if (!user) return res.status(400).send('User not found');
-    bcrypt.compare(password, user.password, (err, match) => {
-      if (match) {
-        req.session.userId = user.id;
-        res.redirect('/tracker.html');
-      } else {
-        res.status(401).send('Invalid credentials');
+
+  db.get(
+    'SELECT * FROM users WHERE username = ?',
+    [username],
+    async (err, user) => {
+      if (err || !user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
       }
-    });
-  });
+      req.session.userId = user.id;
+      res.json({ success: true });
+    }
+  );
 });
 
-app.post('/reset-password', (req, res) => {
+// ✅ Reset Password Route (completely separate)
+// ✅ Reset Password Route
+app.post('/reset-password', async (req, res) => {
   const { username, newPassword } = req.body;
-  db.get('SELECT * FROM users WHERE username = ?', [username], (err, user) => {
-    if (!user) return res.status(400).send('User not found');
-    bcrypt.hash(newPassword, 10, (err, hash) => {
-      db.run('UPDATE users SET password = ? WHERE username = ?', [hash, username], (err) => {
-        if (err) return res.status(500).send('Error resetting password');
-        res.redirect('/index.html');
-      });
-    });
-  });
+  console.log('Password reset request for:', username);
+
+  if (!username || !newPassword) {
+    return res.status(400).json({ error: 'Missing username or new password' });
+  }
+
+  try {
+    const hashed = await bcrypt.hash(newPassword, 12);
+    db.run(
+      'UPDATE users SET password = ? WHERE username = ?',
+      [hashed, username],
+      function (err) {
+        if (err) {
+          console.error('DB error:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        res.json({ success: true });
+      }
+    );
+  } catch (err) {
+    console.error('Hashing error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
+
+// ✅ Login Route (separate and clean)
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+
+  db.get(
+    'SELECT * FROM users WHERE username = ?',
+    [username],
+    async (err, user) => {
+      if (err || !user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      req.session.userId = user.id;
+      res.json({ success: true });
+    }
+  );
+});
+
 
 app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/index.html'));
-});
-
-app.get('/expenses', (req, res) => {
-  const userId = req.session.userId;
-  if (!userId) return res.status(403).send('Not logged in');
-  db.all('SELECT * FROM expenses WHERE user_id = ?', [userId], (err, rows) => {
-    res.json(rows);
+  req.session.destroy(err => {
+    if (err) {
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    res.clearCookie('connect.sid'); // Optional: clears cookie immediately
+    res.json({ success: true });
   });
 });
 
-app.post('/expenses', (req, res) => {
-  const { amount, category, date, note } = req.body;
-  const userId = req.session.userId;
-  if (!userId) return res.status(403).send('Not logged in');
-  db.run('INSERT INTO expenses (user_id, amount, category, date, note) VALUES (?, ?, ?, ?, ?)',
-    [userId, amount, category, date, note],
-    () => res.status(201).send('Expense added'));
+// Expense routes
+app.get('/expenses', requireAuth, (req, res) => {
+  db.all(
+    'SELECT * FROM expenses WHERE user_id = ?',
+    [req.session.userId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    }
+  );
 });
 
-app.delete('/expenses/:id', (req, res) => {
-  const userId = req.session.userId;
-  const id = req.params.id;
-  if (!userId) return res.status(403).send('Not logged in');
-  db.run('DELETE FROM expenses WHERE id = ? AND user_id = ?', [id, userId], () => {
-    res.sendStatus(200);
-  });
-});
-
-app.put('/expenses/:id', (req, res) => {
-  const userId = req.session.userId;
-  const id = req.params.id;
+app.post('/expenses', requireAuth, (req, res) => {
   const { amount, category, date, note } = req.body;
-  if (!userId) return res.status(403).send('Not logged in');
+  
   db.run(
-    `UPDATE expenses 
-     SET amount = ?, category = ?, date = ?, note = ? 
-     WHERE id = ? AND user_id = ?`,
-    [amount, category, date, note, id, userId],
-    () => res.sendStatus(200)
+    'INSERT INTO expenses (user_id, amount, category, date, note) VALUES (?, ?, ?, ?, ?)',
+    [req.session.userId, amount, category, date, note],
+    function(err) {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ id: this.lastID });
+    }
   );
 });
-// Get total spending for current month
-app.get('/analytics/total', (req, res) => {
-  const userId = req.session.userId;
-  const startOfMonth = new Date();
-  startOfMonth.setDate(1);
-  const month = startOfMonth.toISOString().split('T')[0];
+
+app.put('/expenses/:id', requireAuth, (req, res) => {
+  const { amount, category, date, note } = req.body;
+  
+  db.run(
+    'UPDATE expenses SET amount = ?, category = ?, date = ?, note = ? WHERE id = ? AND user_id = ?',
+    [amount, category, date, note, req.params.id, req.session.userId],
+    function(err) {
+      if (err) return res.status(500).json({ error: 'Update failed' });
+      res.json({ success: true });
+    }
+  );
+});
+
+app.delete('/expenses/:id', requireAuth, (req, res) => {
+  db.run(
+    'DELETE FROM expenses WHERE id = ? AND user_id = ?',
+    [req.params.id, req.session.userId],
+    function(err) {
+      if (err) return res.status(500).json({ error: 'Delete failed' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// Analytics routes
+app.get('/analytics/total', requireAuth, (req, res) => {
   db.get(
-    `SELECT SUM(amount) AS total FROM expenses 
-     WHERE user_id = ? AND date >= ?`,
-    [userId, month],
+    `SELECT SUM(amount) as total FROM expenses 
+     WHERE user_id = ? AND strftime('%m', date) = strftime('%m', 'now')`,
+    [req.session.userId],
     (err, row) => {
-      res.json({ total: row.total || 0 });
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ total: row?.total || 0 });
     }
   );
 });
 
-// Get top 3 categories
-app.get('/analytics/top-categories', (req, res) => {
-  const userId = req.session.userId;
+app.get('/analytics/top-categories', requireAuth, (req, res) => {
   db.all(
-    `SELECT category, SUM(amount) AS total FROM expenses 
-     WHERE user_id = ? 
+    `SELECT category, SUM(amount) as total FROM expenses 
+     WHERE user_id = ? AND strftime('%m', date) = strftime('%m', 'now')
      GROUP BY category ORDER BY total DESC LIMIT 3`,
-    [userId],
+    [req.session.userId],
     (err, rows) => {
-      res.json(rows);
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows || []);
     }
   );
 });
 
-// Get data for pie chart
-app.get('/analytics/pie', (req, res) => {
-  const userId = req.session.userId;
+app.get('/analytics/pie', requireAuth, (req, res) => {
   db.all(
-    `SELECT category, SUM(amount) AS total FROM expenses 
-     WHERE user_id = ? GROUP BY category`,
-    [userId],
+    `SELECT category, SUM(amount) as total FROM expenses 
+     WHERE user_id = ? AND strftime('%m', date) = strftime('%m', 'now')
+     GROUP BY category`,
+    [req.session.userId],
     (err, rows) => {
-      res.json(rows);
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows || []);
     }
   );
 });
 
+// Serve index.html for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log('Endpoints:');
+  console.log(`- POST /signup - Create new account`);
+  console.log(`- POST /login - Authenticate user`);
+  console.log(`- GET /logout - End session`);
+  console.log(`- GET /expenses - List all expenses`);
+  console.log(`- POST /expenses - Add new expense`);
+  console.log(`- PUT /expenses/:id - Update expense`);
+  console.log(`- DELETE /expenses/:id - Remove expense`);
 });

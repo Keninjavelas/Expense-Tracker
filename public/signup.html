@@ -3,44 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Expense Tracker - Sign Up</title>
+  <title>Sign Up - Expense Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen flex items-center justify-center p-6">
-  <div class="max-w-md w-full space-y-8">
-    <!-- Instruction Card -->
-    <div class="bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-lg">
-      <h2 class="text-xl font-semibold mb-2 text-blue-400">Create an Account</h2>
-      <p class="text-sm text-gray-300">🧾 Signing up lets you track your expenses securely and privately.</p>
-    </div>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-6">
+  <div class="bg-gray-800 p-8 rounded-lg max-w-md w-full shadow-lg space-y-6">
+    <h2 class="text-3xl font-bold text-center text-blue-400">Sign Up</h2>
 
-    <!-- Signup Form -->
-    <div class="bg-gray-800 border border-gray-700 rounded-lg p-8 shadow-lg">
-      <h2 class="text-2xl font-bold mb-6 text-center text-blue-400">Sign Up</h2>
-      <form action="/signup" method="POST" class="space-y-5">
-        <div>
-          <label for="username" class="block mb-1 text-sm font-medium text-gray-300">Username</label>
-          <input type="text" id="username" name="username" required
-            class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <div>
-          <label for="password" class="block mb-1 text-sm font-medium text-gray-300">Password</label>
-          <input type="password" id="password" name="password" required
-            class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-        <button type="submit"
-          class="w-full bg-blue-600 hover:bg-blue-700 transition duration-200 text-white font-semibold py-2 rounded-md shadow-md">
-          Sign Up
-        </button>
-      </form>
-    </div>
+    <form id="signupForm" class="space-y-4">
+      <input type="text" id="username" placeholder="Username" required
+             class="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none" />
+      <input type="password" id="password" placeholder="Password" required
+             class="w-full p-3 rounded bg-gray-700 border border-gray-600 focus:outline-none" />
+      <button type="submit" class="w-full py-2 bg-green-600 hover:bg-green-700 rounded font-semibold">
+        Create Account
+      </button>
+    </form>
 
-    <!-- Login Redirect -->
-    <div class="text-center">
-      <p class="text-sm text-gray-400">Already have an account?
-        <a href="/index.html" class="text-blue-400 hover:underline">Log in</a>
-      </p>
-    </div>
+    <p class="text-center">
+      Already have an account? <a href="/index.html" class="text-blue-400 hover:underline">Login here</a>
+    </p>
   </div>
+
+  <script>
+    document.getElementById('signupForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      try {
+        const res = await fetch('/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+          credentials: 'include'
+        });
+
+        const result = await res.json();
+
+        if (res.ok && result.success) {
+          window.location.href = '/tracker.html';
+        } else {
+          alert(result.error || 'Signup failed');
+        }
+      } catch (error) {
+        alert('Network error');
+        console.error(error);
+      }
+    });
+  </script>
 </body>
 </html>

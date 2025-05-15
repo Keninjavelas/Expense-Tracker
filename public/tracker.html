@@ -6,13 +6,86 @@
   <title>Expense Tracker Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    .chart-container {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+    html {
+      scroll-behavior: auto;
+    }
+    body {
+      overscroll-behavior-y: contain;
+    }
+    button {
+      transition: all 0.2s ease;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .edit-btn {
+      color: #60a5fa;
+    }
+    .edit-btn:hover {
+      color: #3b82f6;
+    }
+    .delete-btn {
+      color: #f87171;
+    }
+    .delete-btn:hover {
+      color: #ef4444;
+    }
+    tr:hover {
+      background-color: #374151 !important;
+    }
+  </style>
 </head>
-<body class="min-h-screen flex flex-col items-center p-6 space-y-6">
+<body class="min-h-screen flex flex-col items-center p-6 space-y-6 overflow-x-hidden">
 
-  <header class="text-center">
-    <h1 class="text-4xl font-bold text-blue-400 mb-2">🚀 Expense Tracker</h1>
-    <p class="text-gray-400">Track, Analyze, and Visualize your expenses in style</p>
-  </header>
+<header class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-4xl font-bold text-blue-400">Expense Tracker</h1>
+    <p class="text-gray-400 text-sm">Track, analyze, and visualize your expenses</p>
+  </div>
+  <button id="logoutBtn"
+          class="flex items-center bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded shadow">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1m0-12v1m0 10a9 9 0 110-18 9 9 0 010 18z" />
+    </svg>
+    Logout
+  </button>
+</header>
+
+
+
+  <!-- Add Expense Form -->
+  <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
+    <h2 class="text-2xl font-semibold text-green-400 mb-4">➕ Add New Expense</h2>
+    <form id="expenseForm" class="space-y-4">
+      <div>
+        <input type="number" id="amount" placeholder="Amount" required step="0.01"
+               class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white">
+      </div>
+      <div>
+        <input type="text" id="category" placeholder="Category" required
+               class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white">
+      </div>
+      <div>
+        <input type="date" id="date" required
+               class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white">
+      </div>
+      <div>
+        <textarea id="note" placeholder="Note"
+                  class="w-full px-4 py-2 rounded-md bg-gray-700 border border-gray-600 text-white"></textarea>
+      </div>
+      <button type="submit" 
+              class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 rounded-md">
+        Add Expense
+      </button>
+    </form>
+  </section>
 
   <!-- Insights Section -->
   <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
@@ -27,8 +100,10 @@
         <ul id="top-categories" class="mt-2 space-y-1"></ul>
       </div>
       <div class="bg-gray-700 p-4 rounded">
-        <h3 class="text-xl text-pink-400">Category Breakdown</h3>
-        <canvas id="pieChart" width="100" height="100"></canvas>
+        <h3 class="text-xl text-pink-400 mb-2">Category Breakdown</h3>
+        <div class="chart-container">
+          <canvas id="pieChart"></canvas>
+        </div>
       </div>
     </div>
   </section>
@@ -36,136 +111,352 @@
   <!-- Filters -->
   <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg space-y-4">
     <div class="flex flex-wrap justify-between items-center space-y-2 md:space-y-0">
-      <input type="text" id="filterCategory" placeholder="Filter by category..." class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3" />
-      <input type="date" id="filterDate" class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3" />
-      <button onclick="clearFilters()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">Clear Filters</button>
+      <input type="text" id="filterCategory" placeholder="Filter by category..." 
+             class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3">
+      <input type="date" id="filterDate" 
+             class="p-2 rounded bg-gray-700 text-white w-full md:w-1/3">
+      <button id="clearFilters" 
+              class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+        Clear Filters
+      </button>
     </div>
   </section>
 
   <!-- Expense Table -->
   <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
     <h2 class="text-2xl font-semibold text-blue-400 mb-4">💸 Your Expenses</h2>
-    <table class="w-full text-left text-sm">
-      <thead>
-        <tr class="text-purple-300 border-b border-gray-600">
-          <th class="p-2 cursor-pointer" onclick="sortTable('amount')">Amount</th>
-          <th class="p-2 cursor-pointer" onclick="sortTable('category')">Category</th>
-          <th class="p-2 cursor-pointer" onclick="sortTable('date')">Date</th>
-          <th class="p-2">Note</th>
-        </tr>
-      </thead>
-      <tbody id="expenseTable" class="text-gray-300"></tbody>
-    </table>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-sm">
+        <thead>
+          <tr class="text-purple-300 border-b border-gray-600">
+            <th class="p-2 cursor-pointer" data-sort="amount">Amount</th>
+            <th class="p-2 cursor-pointer" data-sort="category">Category</th>
+            <th class="p-2 cursor-pointer" data-sort="date">Date</th>
+            <th class="p-2">Note</th>
+            <th class="p-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="expenseTable" class="text-gray-300"></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- Bar Chart -->
   <section class="w-full max-w-4xl bg-gray-800 rounded-lg p-6 shadow-lg">
     <h2 class="text-2xl font-semibold text-blue-400 mb-4">📈 Total Expenses</h2>
-    <canvas id="barChart"></canvas>
+    <div class="chart-container">
+      <canvas id="barChart"></canvas>
+    </div>
   </section>
 
   <script>
+    // Global variables
     let expenses = [];
+    let barChart = null;
+    let pieChart = null;
+    let currentSort = { key: null, direction: 1 };
 
-    async function fetchData() {
-      const res = await fetch('/expenses');
-      expenses = await res.json();
-      displayExpenses(expenses);
-      drawBarChart();
+    // Initialize the application
+    async function init() {
+      await fetchData();
+      setupEventListeners();
     }
 
+    // Fetch all required data
+    async function fetchData() {
+      try {
+        const [expensesRes, totalRes, topRes, pieRes] = await Promise.all([
+          fetch('/expenses', { credentials: 'include' }),
+          fetch('/analytics/total', { credentials: 'include' }),
+          fetch('/analytics/top-categories', { credentials: 'include' }),
+          fetch('/analytics/pie', { credentials: 'include' })
+        ]);
+
+        if (!expensesRes.ok || !totalRes.ok || !topRes.ok || !pieRes.ok) {
+          throw new Error('Failed to fetch data');
+        }
+
+        expenses = await expensesRes.json();
+        const totalData = await totalRes.json();
+        const topData = await topRes.json();
+        const pieData = await pieRes.json();
+
+        updateUI(expenses, totalData, topData, pieData);
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to load data. Please try again.');
+      }
+    }
+
+    // Update all UI elements
+    function updateUI(expensesData, totalData, topData, pieData) {
+      displayExpenses(expensesData);
+      updateTotalSpending(totalData);
+      updateTopCategories(topData);
+      updateCharts(pieData);
+    }
+
+    // Display expenses in table
     function displayExpenses(data) {
       const table = document.getElementById('expenseTable');
-      table.innerHTML = '';
-      data.forEach(exp => {
-        const row = `<tr class="border-b border-gray-700">
+      table.innerHTML = data.map(exp => `
+        <tr class="border-b border-gray-700" data-id="${exp.id}">
           <td class="p-2">₹${exp.amount.toFixed(2)}</td>
           <td class="p-2">${exp.category}</td>
-          <td class="p-2">${exp.date}</td>
-          <td class="p-2">${exp.note}</td>
-        </tr>`;
-        table.innerHTML += row;
-      });
+          <td class="p-2">${new Date(exp.date).toLocaleDateString()}</td>
+          <td class="p-2">${exp.note || '-'}</td>
+          <td class="p-2 flex space-x-2">
+            <button onclick="editExpense('${exp.id}')" class="edit-btn">Edit</button>
+            <button onclick="deleteExpense('${exp.id}')" class="delete-btn">Delete</button>
+          </td>
+        </tr>
+      `).join('');
     }
 
-    function sortTable(key) {
-      const sorted = [...expenses].sort((a, b) => {
-        if (key === 'amount') return b.amount - a.amount;
-        if (key === 'date') return new Date(b.date) - new Date(a.date);
-        return a[key].localeCompare(b[key]);
-      });
-      displayExpenses(sorted);
+    // Update total spending display
+    function updateTotalSpending(data) {
+      document.getElementById('total-spending').textContent = 
+        `₹${(data.total || 0).toFixed(2)}`;
     }
 
+    // Update top categories list
+    function updateTopCategories(data) {
+      const topEl = document.getElementById('top-categories');
+      topEl.innerHTML = data.map(cat => `
+        <li class="flex justify-between px-2">
+          <span>${cat.category}</span>
+          <span>₹${cat.total.toFixed(2)}</span>
+        </li>
+      `).join('');
+    }
+
+    // Update charts
+    function updateCharts(pieData) {
+      updateBarChart();
+      updatePieChart(pieData);
+    }
+
+    // Update bar chart
+    function updateBarChart() {
+      const barTotals = {};
+      expenses.forEach(exp => {
+        barTotals[exp.category] = (barTotals[exp.category] || 0) + exp.amount;
+      });
+
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      
+      if (barChart) {
+        barChart.data.labels = Object.keys(barTotals);
+        barChart.data.datasets[0].data = Object.values(barTotals);
+        barChart.update();
+      } else {
+        barChart = new Chart(barCtx, {
+          type: 'bar',
+          data: {
+            labels: Object.keys(barTotals),
+            datasets: [{
+              label: 'Total Expense (₹)',
+              data: Object.values(barTotals),
+              backgroundColor: 'rgba(59, 130, 246, 0.7)'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } }
+          }
+        });
+      }
+    }
+
+    // Update pie chart
+    function updatePieChart(pieData) {
+      const pieCtx = document.getElementById('pieChart').getContext('2d');
+      
+      if (pieChart) {
+        pieChart.data.labels = pieData.map(p => p.category);
+        pieChart.data.datasets[0].data = pieData.map(p => p.total);
+        pieChart.update();
+      } else {
+        pieChart = new Chart(pieCtx, {
+          type: 'pie',
+          data: {
+            labels: pieData.map(p => p.category),
+            datasets: [{
+              data: pieData.map(p => p.total),
+              backgroundColor: [
+                '#60a5fa', '#f472b6', '#34d399',
+                '#facc15', '#a78bfa', '#fb7185'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'right' }
+            }
+          }
+        });
+      }
+    }
+
+    // Edit Expense
+    async function editExpense(id) {
+      const expense = expenses.find(exp => exp.id == id);
+      if (!expense) return;
+
+      // Fill form with existing data
+      document.getElementById('amount').value = expense.amount;
+      document.getElementById('category').value = expense.category;
+      document.getElementById('date').value = expense.date;
+      document.getElementById('note').value = expense.note || '';
+
+      // Change form to update mode
+      const form = document.getElementById('expenseForm');
+      form.dataset.editingId = id;
+      form.querySelector('button[type="submit"]').textContent = 'Update Expense';
+      
+      // Scroll to form
+      form.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Delete Expense
+    async function deleteExpense(id) {
+      if (!confirm('Are you sure you want to delete this expense?')) return;
+
+      try {
+        const res = await fetch(`/expenses/${id}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+
+        if (!res.ok) throw new Error('Delete failed');
+        
+        await fetchData(); // Refresh all data
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Failed to delete expense');
+      }
+    }
+
+    // Handle form submission
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      try {
+        submitBtn.disabled = true;
+        const data = {
+          amount: parseFloat(form.amount.value),
+          category: form.category.value,
+          date: form.date.value,
+          note: form.note.value
+        };
+
+        const url = form.dataset.editingId 
+          ? `/expenses/${form.dataset.editingId}`
+          : '/expenses';
+
+        const method = form.dataset.editingId ? 'PUT' : 'POST';
+
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          credentials: 'include'
+        });
+
+        if (!res.ok) throw new Error('Operation failed');
+
+        form.reset();
+        delete form.dataset.editingId;
+        submitBtn.textContent = 'Add Expense';
+        await fetchData();
+        
+      } catch (error) {
+        console.error('Error:', error);
+        alert(error.message);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Apply filters
     function applyFilters() {
       const category = document.getElementById('filterCategory').value.toLowerCase();
       const date = document.getElementById('filterDate').value;
-      const filtered = expenses.filter(exp =>
-        (category ? exp.category.toLowerCase().includes(category) : true) &&
-        (date ? exp.date === date : true)
-      );
+      
+      const filtered = expenses.filter(exp => {
+        const matchesCategory = category ? exp.category.toLowerCase().includes(category) : true;
+        const matchesDate = date ? exp.date === date : true;
+        return matchesCategory && matchesDate;
+      });
+      
       displayExpenses(filtered);
     }
 
+    // Clear filters
     function clearFilters() {
       document.getElementById('filterCategory').value = '';
       document.getElementById('filterDate').value = '';
       displayExpenses(expenses);
     }
 
-    async function drawBarChart() {
-      const totals = {};
-      expenses.forEach(exp => {
-        totals[exp.category] = (totals[exp.category] || 0) + exp.amount;
+    // Sort table
+    function sortTable(key) {
+      currentSort.direction = currentSort.key === key ? -currentSort.direction : 1;
+      currentSort.key = key;
+      
+      const sorted = [...expenses].sort((a, b) => {
+        if (key === 'amount') {
+          return currentSort.direction * (b.amount - a.amount);
+        }
+        if (key === 'date') {
+          return currentSort.direction * (new Date(b.date) - new Date(a.date));
+        }
+        return currentSort.direction * a[key].localeCompare(b[key]);
       });
-      const ctx = document.getElementById('barChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: Object.keys(totals),
-          datasets: [{
-            label: 'Total Expense (₹)',
-            data: Object.values(totals),
-            backgroundColor: 'rgba(59, 130, 246, 0.7)'
-          }]
-        },
-        options: { responsive: true }
-      });
+      
+      displayExpenses(sorted);
     }
 
-    async function loadAnalytics() {
-      const totalRes = await fetch('/analytics/total');
-      const totalData = await totalRes.json();
-      document.getElementById('total-spending').textContent = `₹${totalData.total.toFixed(2)}`;
+    // Setup event listeners
+    function setupEventListeners() {
+  document.getElementById('expenseForm').addEventListener('submit', handleSubmit);
+  document.getElementById('filterCategory').addEventListener('input', applyFilters);
+  document.getElementById('filterDate').addEventListener('input', applyFilters);
+  document.getElementById('clearFilters').addEventListener('click', clearFilters);
 
-      const topRes = await fetch('/analytics/top-categories');
-      const topData = await topRes.json();
-      const topEl = document.getElementById('top-categories');
-      topEl.innerHTML = topData.map(cat => `<li>${cat.category} - ₹${cat.total.toFixed(2)}</li>`).join('');
+  document.querySelectorAll('[data-sort]').forEach(th => {
+    th.addEventListener('click', () => sortTable(th.dataset.sort));
+  });
 
-      const pieRes = await fetch('/analytics/pie');
-      const pieData = await pieRes.json();
-      const ctx = document.getElementById('pieChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels: pieData.map(p => p.category),
-          datasets: [{
-            data: pieData.map(p => p.total),
-            backgroundColor: ['#60a5fa', '#f472b6', '#34d399', '#facc15', '#a78bfa']
-          }]
-        },
-        options: { responsive: true }
-      });
-    }
+  // ✅ Add logout button logic here
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/logout', { credentials: 'include' });
+        if (res.ok) {
+          window.location.href = '/index.html';
+        } else {
+          alert('Logout failed');
+        }
+      } catch (err) {
+        alert('Network error during logout');
+        console.error(err);
+      }
+    });
+  }
+}
 
-    document.getElementById('filterCategory').addEventListener('input', applyFilters);
-    document.getElementById('filterDate').addEventListener('input', applyFilters);
 
-    window.onload = async () => {
-      await fetchData();
-      await loadAnalytics();
-    };
+    // Start the application
+    document.addEventListener('DOMContentLoaded', init);
   </script>
+  <script src="script.js"></script>
 </body>
 </html>
